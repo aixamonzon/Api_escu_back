@@ -1,8 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
-from models.user import session, InputUser, User, InputLogin
-from models.userDetail import UserDetail
+from models.user import session, InputUser, User, InputLogin, InputUserDetail
 from sqlalchemy.orm import (
    joinedload,
 )
@@ -103,6 +102,22 @@ def crear_usuario(user: InputUser):
     finally:
        session.close()
 
+@user.get("/userdetail/all")
+def get_userDetails():
+   try:
+       return session.query(UserDetail).all()
+   except Exception as e:
+       print(e)
+
+
+@user.post("/userdetail/add")
+def add_usuarDetail(userDet: InputUserDetail):
+   usuNuevo = UserDetail(
+   userDet.dni, userDet.firstName, userDet.lastName, userDet.type,           userDet.email
+   )
+   session.add(usuNuevo)
+   session.commit()
+   return "usuario detail agregado"
 
 def validate_username(value):
    existing_user = session.query(User).filter(User.username == value).first()

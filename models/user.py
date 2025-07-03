@@ -26,6 +26,29 @@ class User(Base):
        self.username = username
        self.password = password
 
+class UserDetail(Base):
+
+
+   __tablename__ = "userdetails"
+
+
+   id = Column("id", Integer, primary_key=True)
+   dni = Column("dni", Integer)
+   firstName = Column("firstName", String)
+   lastName = Column("lastName", String)
+   type = Column("type", String)
+   email = Column("email", String(80), nullable=False, unique=True)
+
+
+   def __init__(self, dni, firstName, lastName, type, email):
+       self.dni = dni
+       self.firstName = firstName
+       self.lastName = lastName
+       self.type = type
+       self.email = email
+
+
+
 
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
@@ -50,3 +73,12 @@ class InputUser(BaseModel):
 class InputLogin(BaseModel):
    username: str
    password: str
+
+class InputUser(BaseModel):
+   username: str
+   password: str
+   email: EmailStr
+   dni: int
+   firstname: str
+   lastname: str
+   type: str
