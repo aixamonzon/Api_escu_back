@@ -1,12 +1,14 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
 from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail
-from security.auth import create_access_token
+from security.auth import crear_token, obtener_usuario_actual
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import (
    joinedload,
 )
+from security.security import verificar_password
+from security.dependencies import solo_admin, solo_alumno
 
 user = APIRouter()
 
@@ -16,7 +18,7 @@ def welcome():
    return "Bienvenido!!"
 
 
-@user.get("/users/all")
+@user.get("/users/all", dependencies=[Depends(solo_admin)]) # Solo accesible para administradores
 def obtener_usuario_detalle():
   try:
       # Carga los detalles del usuario con unión
@@ -46,32 +48,19 @@ def obtener_usuario_detalle():
 @user.post("/users/login")
 def login_post(userIn: InputLogin):
    try:
-       user = session.query(User).filter(User.username == userIn.username).first()
-       if not user.password == userIn.password:
-           return JSONResponse(
+        user = session.query(User).filter(User.username == userIn.username).first()
+        if not user or not verificar_password(userIn.password, user.password):
+           # Si el usuario no existe o la contraseña es incorrecta
+           raise HTTPException(
                status_code=401,
-               content={
-                   "success": False,
-                   "message": "Usuario y/o password incorrectos!",
-               },
+               detail="Credenciales inválidas",
            )
-       else:
-           authDat = create_access_token(user)
-           if not authDat:
-               return JSONResponse(
-                   status_code=401,
-                   content={
-                       "success": False,
-                       "message": "Error de generación de token!",
-                   },
-               )
-           else:
-               return JSONResponse(
-                   status_code=200, content={"success": True, "token": authDat}
-               )
+         # Si las credenciales son correctas, crea el token
+        token = crear_token(user)
+        return {"success": True, "token": token}
 
    except Exception as e:
-       print(e)
+       print("Error en login:", e)
        return JSONResponse(
            status_code=500,
            content={
@@ -80,7 +69,7 @@ def login_post(userIn: InputLogin):
            },
        )
 
-@user.post("/users/add")
+@user.post("/users/register")
 def crear_usuario(user: InputUser):
     try:
        if validate_username(user.username):
