@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
 from models.user import session, InputUser, User
-from models.pago import Pago, InputUser, NuevoPago
+from models.pago import Pago, NuevoPago
 from sqlalchemy.orm import (
    joinedload,
 )

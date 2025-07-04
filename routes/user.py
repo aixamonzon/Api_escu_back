@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
 from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail
-from security.auth import create_access_token, get_current_user
+from security.auth import create_access_token
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import (
    joinedload,
@@ -20,18 +20,18 @@ def welcome():
 def obtener_usuario_detalle():
   try:
       # Carga los detalles del usuario con unión
-      usuarios = session.query(User).options(joinedload(User.userdetail)).all()
+      usuarios = session.query(User).options(joinedload(User.user_detail)).all()
       # Convierte los usuarios en una lista de diccionarios
       usuarios_con_detalles = []
       for usuario in usuarios:
           usuario_con_detalle = {
               "id": usuario.id,
               "username": usuario.username,
-              "email": usuario.userdetail.email,
-              "dni": usuario.userdetail.dni,
-              "first_name": usuario.userdetail.first_name,
-              "last_name": usuario.userdetail.last_name,
-              "type": usuario.userdetail.type,
+              "email": usuario.user_detail.email,
+              "dni": usuario.user_detail.dni,
+              "first_name": usuario.user_detail.first_name,
+              "last_name": usuario.user_detail.last_name,
+              "type": usuario.user_detail.type,
           }
           usuarios_con_detalles.append(usuario_con_detalle)
 
@@ -70,7 +70,6 @@ def login_post(userIn: InputLogin):
                    status_code=200, content={"success": True, "token": authDat}
                )
 
-
    except Exception as e:
        print(e)
        return JSONResponse(
@@ -80,8 +79,6 @@ def login_post(userIn: InputLogin):
                "message": "Error interno del servidor",
            },
        )
-
-
 
 @user.post("/users/add")
 def crear_usuario(user: InputUser):
@@ -134,7 +131,7 @@ def get_userDetails():
 @user.post("/userdetail/add")
 def add_usuarDetail(userDet: InputUserDetail):
    usuNuevo = UserDetail(
-   userDet.dni, userDet.firstName, userDet.lastName, userDet.type,           userDet.email
+   userDet.dni, userDet.firstName, userDet.lastName, userDet.type, userDet.email
    )
    session.add(usuNuevo)
    session.commit()

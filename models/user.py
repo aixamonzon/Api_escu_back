@@ -3,49 +3,37 @@ from sqlalchemy import Column, Integer, String, ForeignKey
 from config.db import Base, engine
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import sessionmaker, relationship
+from models.userCarrera import UserCarrera
 
 class User(Base):
-   __tablename__ = "usuarios"
+   __tablename__ = "users"
 
 
    id = Column("id", Integer, primary_key=True)
    username = Column(String(50), nullable=False, unique=True)
    password = Column("password", String)
-   id_userdetail = Column(Integer, ForeignKey("userdetails.id"))
-   userdetail = relationship("UserDetail", backref="user", uselist=False)
-   pagos = relationship("Pago", back_populates="user")
-   carreras = relationship("UserCarrera", back_populates="user")
 
-   def __init__(
-       self,
-       id,
-       username,
-       password,
-   ):
-       self.id = id
-       self.username = username
-       self.password = password
+   user_detail = relationship("UserDetail", back_populates="user", uselist=False, cascade="all, delete")
+   carreras = relationship("UserCarrera", back_populates="user", cascade="all, delete")
+   pagos = relationship("Pago", back_populates="user", cascade="all, delete")
 
 class UserDetail(Base):
 
-   __tablename__ = "userdetails"
+   __tablename__ = "user_detail"
+   
+   id = Column(Integer, primary_key=True, autoincrement=True)
+   user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+   dni = Column(String(20), unique=True, nullable=False)
+   first_name = Column(String(100), nullable=False)
+   last_name = Column(String(100), nullable=False)
+   type = Column(String(20), nullable=False) 
+   email = Column(String(100), unique=True, nullable=False)
 
-   id = Column("id", Integer, primary_key=True)
-   dni = Column("dni", Integer)
-   firstName = Column("firstName", String)
-   lastName = Column("lastName", String)
-   type = Column("type", String)
-   email = Column("email", String(80), nullable=False, unique=True)
-
-   def __init__(self, dni, firstName, lastName, type, email):
-       self.dni = dni
-       self.firstName = firstName
-       self.lastName = lastName
-       self.type = type
-       self.email = email
+    # Relación inversa
+   user = relationship("User", back_populates="user_detail")
 
 # Borra las tablas en la base de datos
-Base.metadata.drop_all(bind=engine)
+#Base.metadata.drop_all(bind=engine)
 # Crear las tablas en la base de datos
 Base.metadata.create_all(bind=engine)
 
@@ -54,9 +42,9 @@ class InputUser(BaseModel):
    username: str
    password: str
    email: str
-   dni: int
-   firstName: str
-   lastName: str
+   dni: str
+   first_name: str
+   last_name: str
    type: str
    
 class InputLogin(BaseModel):
@@ -64,16 +52,16 @@ class InputLogin(BaseModel):
     password: str
 
 class InputUserDetail(BaseModel):
-   dni: int
-   firstName: str
-   lastName: str
+   dni: str
+   first_name: str
+   last_name: str
    type: str
    email: str
 
 class UserDetailUpdate(BaseModel):
-    dni: Optional[int] = None
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
+    dni: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     type: Optional[str] = None
     email: Optional[str]  = None
 
@@ -84,9 +72,9 @@ class InputRegister(BaseModel):
        
 class UserDetailOut(BaseModel):
     email: str
-    dni: int
-    firstName: str
-    lastName: str
+    dni: str
+    first_name: str
+    last_name: str
     type: str
 
     class Config:
@@ -95,7 +83,7 @@ class UserDetailOut(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
-    userdetail: UserDetailOut  # 👈 Anidado
+    user_detail: UserDetailOut  # Anidado detalle de usuario
 
     class Config:
         orm_mode = True

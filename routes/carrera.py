@@ -1,11 +1,9 @@
-from fastapi import APIRouter
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from models.carrera import Carrera, NuevaCarrera, EditarCarrera, session
 from psycopg2 import IntegrityError
-from models.carrera import Carrera, CarreraOut, NuevaCarrera, EditarCarrera
-from config.db import session
-from sqlalchemy.orm import (
-   joinedload,
-)
+from sqlalchemy.orm import joinedload
 
 carrera_router = APIRouter()
 
