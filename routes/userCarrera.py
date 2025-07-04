@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from psycopg2 import session, IntegrityError
-from models.userCarrera import UserCarrera, UserCarreraOut, NuevaUserCarrera, EditarUserCarrera
+from config.db import Base, engine
+from models.userCarrera import UserCarrera, UserCarreraOut, NuevaUserCarrera, EditarUserCarrera, session
+from models.user import User
+from sqlalchemy.exc import IntegrityError
+from security.auth import obtener_usuario_actual
 from sqlalchemy.orm import (
    joinedload,
 )

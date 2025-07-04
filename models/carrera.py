@@ -9,7 +9,7 @@ class Carrera(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nombre = Column(String(100), nullable=False, unique=True)
 
-    usuarios = relationship("UserCarrera", back_populates="carrera", cascade="all, delete")
+    users = relationship("UserCarrera", back_populates="carrera", cascade="all, delete")
     pagos = relationship("Pago", back_populates="carrera", cascade="all, delete")
 
 # Crear las tablas en la base de datos

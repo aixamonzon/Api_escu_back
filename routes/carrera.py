@@ -5,6 +5,7 @@ from models.carrera import Carrera, NuevaCarrera, EditarCarrera, session
 from security.auth import crear_token, obtener_usuario_actual
 from psycopg2 import IntegrityError
 from sqlalchemy.orm import joinedload
+from config.db import Base, engine
 
 carrera_router = APIRouter()
 
@@ -80,6 +81,7 @@ def crear_carrera(carrera: NuevaCarrera, payload=Depends(obtener_usuario_actual)
         session.commit()
         return {"detail": "Carrera creada exitosamente"}
     except Exception as e:
+        print("Error al editar carrera:", e)
         session.rollback()
         raise HTTPException(status_code=500, detail="Error al crear carrera")
 
@@ -96,6 +98,7 @@ def editar_carrera(id: int, carrera: EditarCarrera, payload=Depends(obtener_usua
         session.commit()
         return {"detail": "Carrera actualizada exitosamente"}
     except Exception as e:
+        print("Error al editar carrera:", e)
         session.rollback()
         raise HTTPException(status_code=500, detail="Error al editar carrera")
     

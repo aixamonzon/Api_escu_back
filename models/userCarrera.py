@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, sessionmaker
 from config.db import Base, engine
 from pydantic import BaseModel
 from typing import Optional
@@ -13,7 +13,11 @@ class UserCarrera(Base):
     carrera_id = Column(Integer, ForeignKey("carreras.id", ondelete="CASCADE"), nullable=False)
 
     user = relationship("User", back_populates="carreras")
-    carrera = relationship("Carrera", back_populates="usuarios")
+    carrera = relationship("Carrera", back_populates="users")
+
+
+# Crear las tablas en la base de datos
+Base.metadata.create_all(engine)
 
 #region Schemas PYDANTIC
 class UserCarreraOut(BaseModel):
@@ -40,5 +44,7 @@ class EditarUserCarrera(BaseModel):
         orm_mode = True  # Permite convertir desde un modelo SQLAlchemy
 
 #endregion Schemas PYDANTIC
-# Crear las tablas en la base de datos
-Base.metadata.create_all(engine)
+
+Session = sessionmaker(bind=engine)
+
+session = Session()

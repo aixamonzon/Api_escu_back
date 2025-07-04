@@ -64,8 +64,8 @@ class InputUserDetail(BaseModel):
 
 class UserUpdateAdmin(BaseModel):
     dni: Optional[str] = None
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     type: Optional[str] = None
     email: Optional[EmailStr] = None
     username: Optional[str] = None
@@ -77,8 +77,8 @@ class InputAlumnoRegistro(BaseModel):
 
 class AlumnoCompletarRegistro(BaseModel):
     dni: str
-    firstName: str
-    lastName: str
+    first_name: str
+    last_name: str
     type: str = "alumno"
 
 class InputRegister(BaseModel):
@@ -100,6 +100,18 @@ class UserOut(BaseModel):
     id: int
     username: str
     user_detail: UserDetailOut  # Anidado detalle de usuario
+
+    class Config:
+        orm_mode = True
+
+class AlumnoOut(BaseModel):
+    id: int
+    username: str
+    dni: str
+    firstname: str
+    lastname: str
+    email: str
+    type: str
 
     class Config:
         orm_mode = True

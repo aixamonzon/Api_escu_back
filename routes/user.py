@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
-from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail, InputAlumnoRegistro, UserUpdateAdmin, AlumnoCompletarRegistro, PasswordChange
+from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail, InputAlumnoRegistro, UserUpdateAdmin, AlumnoCompletarRegistro, PasswordChange, AlumnoOut
 from security.auth import crear_token, obtener_usuario_actual
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import (
    joinedload,
 )
-from security.security import verificar_password
+from security.security import verificar_password, hash_password
 from security.dependencies import solo_admin, solo_alumno
 
 user = APIRouter()
@@ -44,6 +44,30 @@ def obtener_usuario_detalle():
           status_code=500, content={"detail": "Error al obtener usuarios"}
       )
 
+@user.get("/users/alumnos", response_model=list[AlumnoOut])
+def obtener_usuarios_alumnos(
+    payload=Depends(obtener_usuario_actual),
+):
+    if payload["type"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden ver esta información")
+
+    alumnos = session.query(User).options(joinedload(User.user_detail)) \
+        .join(UserDetail) \
+        .filter(UserDetail.type == "alumno").all()
+
+    # Pydantic se encarga de convertir desde el modelo con orm_mode=True
+    return [
+        AlumnoOut(
+            id=alumno.id,
+            username=alumno.username,
+            dni=alumno.user_detail.dni,
+            firstname=alumno.user_detail.first_name,
+            lastname=alumno.user_detail.last_name,
+            email=alumno.user_detail.email,
+            type=alumno.user_detail.type,
+        )
+        for alumno in alumnos
+    ]
 
 @user.post("/users/login")
 def login_post(userIn: InputLogin):
@@ -85,8 +109,8 @@ def crear_usuario_admin(user: InputUser, payload=Depends(obtener_usuario_actual)
         newUser = User(username=user.username, password=hashed_pw)
         newUserDetail = UserDetail(
             dni=user.dni,
-            firstName=user.firstName,
-            lastName=user.lastName,
+            first_name=user.first_name,
+            last_name=user.last_name,
             type=user.type,
             email=user.email,
         )
@@ -95,6 +119,7 @@ def crear_usuario_admin(user: InputUser, payload=Depends(obtener_usuario_actual)
         session.commit()
         return {"success": True, "message": "Usuario creado"}
     except Exception as e:
+        print("Error al crear usuario:", e)
         session.rollback()
         raise HTTPException(status_code=500, detail="Error al crear usuario")
     finally:
@@ -128,10 +153,10 @@ def actualizar_usuario_admin(
     # Actualizar otros campos si vienen
     if datos.dni:
         user.user_detail.dni = datos.dni
-    if datos.firstName:
-        user.user_detail.firstName = datos.firstName
-    if datos.lastName:
-        user.user_detail.lastName = datos.lastName
+    if datos.first_name:
+        user.user_detail.first_name = datos.first_name
+    if datos.last_name:
+        user.user_detail.last_name = datos.last_name
     if datos.type:
         user.user_detail.type = datos.type
 
@@ -151,8 +176,8 @@ def crear_usuario_alumno(user: InputAlumnoRegistro):
         newUser = User(username=user.username, password=hashed_pw)
         newUserDetail = UserDetail(
             dni="",  # Vacío hasta completar registro
-            firstName="",
-            lastName="",
+            first_name="",
+            last_name="",
             type="alumno",
             email=user.email,
         )
@@ -179,8 +204,8 @@ def completar_registro_alumno(
         # Actualizar datos en user_detail
         detail = user.user_detail
         detail.dni = datos.dni
-        detail.firstName = datos.firstName
-        detail.lastName = datos.lastName
+        detail.first_name = datos.first_name
+        detail.last_name = datos.last_name
         detail.type = datos.type
 
         session.commit()
@@ -201,8 +226,8 @@ def ver_perfil(payload=Depends(obtener_usuario_actual)):
         "username": user.username,
         "email": user.user_detail.email,
         "dni": user.user_detail.dni,
-        "firstName": user.user_detail.firstName,
-        "lastName": user.user_detail.lastName,
+        "first_name": user.user_detail.first_name,
+        "last_name": user.user_detail.last_name,
         "type": user.user_detail.type,
     }
 
@@ -233,7 +258,7 @@ def get_userDetails():
 @user.post("/userdetail/add")
 def add_usuarDetail(userDet: InputUserDetail):
    usuNuevo = UserDetail(
-   userDet.dni, userDet.firstName, userDet.lastName, userDet.type, userDet.email
+   userDet.dni, userDet.first_name, userDet.last_name, userDet.type, userDet.email
    )
    session.add(usuNuevo)
    session.commit()
