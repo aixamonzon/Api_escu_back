@@ -7,6 +7,8 @@ from sqlalchemy.orm import (
    joinedload,
 )
 from security.auth import obtener_usuario_actual
+from sqlalchemy.orm import joinedload
+
 
 pago = APIRouter()
 
@@ -19,7 +21,7 @@ def ver_todos_los_pagos(payload=Depends(obtener_usuario_actual)):
     if payload["type"] != "admin":
         raise HTTPException(status_code=403, detail="Solo el admin puede ver todos los pagos")
 
-    pagos = session.query(Pago).options(joinedload(Pago.user)).all()
+    pagos = session.query(Pago).options(joinedload(Pago.user), joinedload(Pago.carrera)).all()
 
     return [
         {
@@ -27,7 +29,10 @@ def ver_todos_los_pagos(payload=Depends(obtener_usuario_actual)):
             "monto": str(pago.monto),
             "mes": pago.mes,
             "fecha_pago": str(pago.fecha_pago),
-            "carrera_id": pago.carrera_id,
+            "carrera": {
+                "id": pago.carrera.id,
+                "nombre": pago.carrera.nombre
+            },
             "user": {
                 "id": pago.user.id,
                 "username": pago.user.username
@@ -61,7 +66,7 @@ def ver_mis_pagos(payload=Depends(obtener_usuario_actual)):
     if payload["type"] != "alumno":
         raise HTTPException(status_code=403, detail="Solo los alumnos pueden ver sus pagos")
 
-    pagos = session.query(Pago).filter(Pago.user_id == payload["sub"]).all()
+    pagos = session.query(Pago).options(joinedload(Pago.carrera)).filter(Pago.user_id == payload["sub"]).all()
 
     return [
         {
@@ -69,7 +74,8 @@ def ver_mis_pagos(payload=Depends(obtener_usuario_actual)):
             "monto": str(pago.monto),
             "mes": pago.mes,
             "fecha_pago": str(pago.fecha_pago),
-            "carrera_id": pago.carrera_id
+            "carrera_id": pago.carrera_id,
+            "carrera_nombre": pago.carrera.nombre if pago.carrera else None
         }
         for pago in pagos
     ]
