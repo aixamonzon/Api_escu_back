@@ -41,7 +41,7 @@ Base.metadata.create_all(bind=engine)
 class InputUser(BaseModel):
    username: str
    password: str
-   email: str
+   email: EmailStr
    dni: str
    first_name: str
    last_name: str
@@ -51,24 +51,40 @@ class InputLogin(BaseModel):
     username: str
     password: str
 
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
 class InputUserDetail(BaseModel):
    dni: str
    first_name: str
    last_name: str
    type: str
-   email: str
+   email: EmailStr
 
-class UserDetailUpdate(BaseModel):
+class UserUpdateAdmin(BaseModel):
     dni: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
     type: Optional[str] = None
-    email: Optional[str]  = None
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
+
+class InputAlumnoRegistro(BaseModel):
+    username: str
+    password: str
+    email: EmailStr
+
+class AlumnoCompletarRegistro(BaseModel):
+    dni: str
+    firstName: str
+    lastName: str
+    type: str = "alumno"
 
 class InputRegister(BaseModel):
    username: str
    password: str
-   email: str
+   email: EmailStr
        
 class UserDetailOut(BaseModel):
     email: str

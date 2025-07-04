@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
-from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail
+from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail, InputAlumnoRegistro, UserUpdateAdmin, AlumnoCompletarRegistro, PasswordChange
 from security.auth import crear_token, obtener_usuario_actual
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import (
@@ -69,46 +69,159 @@ def login_post(userIn: InputLogin):
            },
        )
 
-@user.post("/users/register")
-def crear_usuario(user: InputUser):
+@user.post("/users/register/admin")
+def crear_usuario_admin(user: InputUser, payload=Depends(obtener_usuario_actual)):
+    # Solo admin puede crear usuarios con todos los datos
+    if payload.get("type") != "admin":
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    if not validate_username(user.username):
+        raise HTTPException(status_code=400, detail="El username ya existe")
+    if not validate_email(user.email):
+        raise HTTPException(status_code=400, detail="El email ya existe")
+
     try:
-       if validate_username(user.username):
-           if validate_email(user.email):
-               newUser = User(
-                   user.username,
-                   user.password,
-               )
-               newUserDetail = UserDetail(
-                   user.dni, user.firstname, user.lastname, user.type, user.email
-               )
-               newUser.userdetail = newUserDetail
-               session.add(newUser)
-               session.commit()
-               return "usuario agregado"
-           else:
-               return "el email ya existe"
-       else:
-           return "el usuario ya existe"
-    except IntegrityError as e:
-       # Suponiendo que el msj de error contiene "username" para el campo duplicado
-       if "username" in str(e):
-           return JSONResponse(
-               status_code=400, content={"detail": "Username ya existe"}
-           )
-       else:
-           # Maneja otros errores de integridad
-           print("Error de integridad inesperado:", e)
-           return JSONResponse(
-               status_code=500, content={"detail": "Error al agregar usuario"}
-           )
+        hashed_pw = hash_password(user.password)
+        newUser = User(username=user.username, password=hashed_pw)
+        newUserDetail = UserDetail(
+            dni=user.dni,
+            firstName=user.firstName,
+            lastName=user.lastName,
+            type=user.type,
+            email=user.email,
+        )
+        newUser.user_detail = newUserDetail
+        session.add(newUser)
+        session.commit()
+        return {"success": True, "message": "Usuario creado"}
     except Exception as e:
-       session.rollback()
-       print("Error inesperado:", e)
-       return JSONResponse(
-           status_code=500, content={"detail": "Error al agregar usuario"}
-       )
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Error al crear usuario")
     finally:
-       session.close()
+        session.close()
+
+@user.put("/users/{user_id}/update")
+def actualizar_usuario_admin(
+    user_id: int,
+    datos: UserUpdateAdmin,
+    payload=Depends(obtener_usuario_actual),
+):
+    # Sólo admin
+    if payload.get("type") != "admin":
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    user = session.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Validar username y email si vienen para evitar duplicados
+    if datos.username and datos.username != user.username:
+        if not validate_username(datos.username):
+            raise HTTPException(status_code=400, detail="El username ya existe")
+        user.username = datos.username
+
+    if datos.email and datos.email != user.user_detail.email:
+        if not validate_email(datos.email):
+            raise HTTPException(status_code=400, detail="El email ya existe")
+        user.user_detail.email = datos.email
+
+    # Actualizar otros campos si vienen
+    if datos.dni:
+        user.user_detail.dni = datos.dni
+    if datos.firstName:
+        user.user_detail.firstName = datos.firstName
+    if datos.lastName:
+        user.user_detail.lastName = datos.lastName
+    if datos.type:
+        user.user_detail.type = datos.type
+
+    session.commit()
+    session.close()
+    return {"success": True, "message": "Usuario actualizado"}
+
+@user.post("/users/register/alumno")
+def crear_usuario_alumno(user: InputAlumnoRegistro):
+    if not validate_username(user.username):
+        raise HTTPException(status_code=400, detail="El username ya existe")
+    if not validate_email(user.email):
+        raise HTTPException(status_code=400, detail="El email ya existe")
+
+    try:
+        hashed_pw = hash_password(user.password)
+        newUser = User(username=user.username, password=hashed_pw)
+        newUserDetail = UserDetail(
+            dni="",  # Vacío hasta completar registro
+            firstName="",
+            lastName="",
+            type="alumno",
+            email=user.email,
+        )
+        newUser.user_detail = newUserDetail
+        session.add(newUser)
+        session.commit()
+        return {"success": True, "message": "Usuario alumno creado"}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Error al crear usuario alumno")
+    finally:
+        session.close()
+
+@user.put("/users/alumno/completar")
+def completar_registro_alumno(
+    datos: AlumnoCompletarRegistro,
+    payload=Depends(obtener_usuario_actual),
+):
+    try:
+        user = session.query(User).filter(User.id == payload["sub"]).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Actualizar datos en user_detail
+        detail = user.user_detail
+        detail.dni = datos.dni
+        detail.firstName = datos.firstName
+        detail.lastName = datos.lastName
+        detail.type = datos.type
+
+        session.commit()
+        return {"success": True, "message": "Registro completado"}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Error al completar registro")
+    finally:
+        session.close()
+
+@user.get("/users/me")
+def ver_perfil(payload=Depends(obtener_usuario_actual)):
+    user = session.query(User).filter(User.id == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.user_detail.email,
+        "dni": user.user_detail.dni,
+        "firstName": user.user_detail.firstName,
+        "lastName": user.user_detail.lastName,
+        "type": user.user_detail.type,
+    }
+
+@user.put("/users/change-password")
+def cambiar_contraseña(
+    data: PasswordChange,
+    payload=Depends(obtener_usuario_actual),
+):
+    user = session.query(User).filter(User.id == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if not verify_password(data.old_password, user.password):
+        raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
+
+    user.password = hash_password(data.new_password)
+    session.commit()
+    session.close()
+    return {"success": True, "message": "Contraseña actualizada correctamente"}
 
 @user.get("/userdetail/all")
 def get_userDetails():

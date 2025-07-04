@@ -2,6 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from models.carrera import Carrera, NuevaCarrera, EditarCarrera, session
+from security.auth import crear_token, obtener_usuario_actual
 from psycopg2 import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -12,102 +13,103 @@ def welcome():
     return "Bienvenido a la ruta de carreras!"
 
 @carrera_router.get("/carreras/all")
-def obtener_carreras():
-    try:
-        # Carga las carreras con unión a usuarios y pagos
-        carreras = session.query(Carrera).options(joinedload(Carrera.users), joinedload(Carrera.pagos)).all()
-        # Convierte las carreras en una lista de diccionarios
-        carreras_con_detalles = []
+def obtener_carreras(payload=Depends(obtener_usuario_actual)):
+    """
+    Admin ve todas las carreras.
+    Alumno ve solo su carrera.
+    """
+    if payload["type"] == "admin":
+        carreras = session.query(Carrera).options(joinedload(Carrera.users)).all()
+        resultado = []
         for carrera in carreras:
-            carrera_con_detalle = {
+            resultado.append({
                 "id": carrera.id,
                 "nombre": carrera.nombre,
-                "users": [user.user_id for user in carrera.users],
-                "pagos": [{"id": pago.id, "monto": pago.monto, "mes": pago.mes} for pago in carrera.pagos]
-            }
-            carreras_con_detalles.append(carrera_con_detalle)
+                "users": [uc.user_id for uc in carrera.users]
+            })
+        return resultado
 
-        return JSONResponse(status_code=200, content=carreras_con_detalles)
-    except Exception as e:
-        print("Error al obtener carreras:", e)
-        return JSONResponse(
-            status_code=500, content={"detail": "Error al obtener carreras"}
-        )
+    elif payload["type"] == "alumno":
+        # Obtener la carrera del alumno
+        user_carreras = session.query(UserCarrera).filter(UserCarrera.user_id == payload["sub"]).all()
+        carreras = []
+        for uc in user_carreras:
+            carreras.append({
+                "id": uc.carrera.id,
+                "nombre": uc.carrera.nombre
+            })
+        return carreras
+    else:
+        raise HTTPException(status_code=403, detail="Acceso no autorizado")
     
 @carrera_router.get("/carreras/{id}")
-def obtener_carrera_por_id(id: int):
-    try:
-        # Buscar la carrera por ID
-        carrera = session.query(Carrera).options(joinedload(Carrera.users), joinedload(Carrera.pagos)).filter(Carrera.id == id).first()
-        
-        if not carrera:
-            return JSONResponse(status_code=404, content={"detail": "Carrera no encontrada"})
-        
-        # Convertir la carrera en un diccionario
-        carrera_con_detalle = {
+def obtener_carrera_por_id(id: int, payload=Depends(obtener_usuario_actual)):
+    carrera = session.query(Carrera).filter(Carrera.id == id).first()
+    if not carrera:
+        raise HTTPException(status_code=404, detail="Carrera no encontrada")
+
+    if payload["type"] == "admin":
+        # Admin puede ver todo
+        return {
             "id": carrera.id,
-            "nombre": carrera.nombre,
-            "users": [user.user_id for user in carrera.users],
-            "pagos": [{"id": pago.id, "monto": pago.monto, "mes": pago.mes} for pago in carrera.pagos]
+            "nombre": carrera.nombre
         }
-        
-        return JSONResponse(status_code=200, content=carrera_con_detalle)
-    except Exception as e:
-        print("Error al obtener carrera:", e)
-        return JSONResponse(
-            status_code=500, content={"detail": "Error al obtener carrera"}
-        )
+    elif payload["type"] == "alumno":
+        # Alumno puede ver solo si está inscripto
+        user_carrera = session.query(UserCarrera).filter(
+            UserCarrera.user_id == payload["sub"],
+            UserCarrera.carrera_id == id
+        ).first()
+        if user_carrera:
+            return {
+                "id": carrera.id,
+                "nombre": carrera.nombre
+            }
+        else:
+            raise HTTPException(status_code=403, detail="No está inscripto en esta carrera")
+    else:
+        raise HTTPException(status_code=403, detail="Acceso no autorizado")
     
 @carrera_router.post("/carreras/create")
-def crear_carrera(carrera: NuevaCarrera):
+def crear_carrera(carrera: NuevaCarrera, payload=Depends(obtener_usuario_actual)):
+    if payload["type"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin puede crear carreras")
+    nueva_carrera = Carrera(nombre=carrera.nombre)
     try:
-        nueva_carrera = Carrera(nombre=carrera.nombre)
         session.add(nueva_carrera)
         session.commit()
-        return JSONResponse(status_code=201, content={"detail": "Carrera creada exitosamente"})
-    except IntegrityError as e:
-        session.rollback()
-        print("Error al crear carrera:", e)
-        return JSONResponse(status_code=400, content={"detail": "Error al crear carrera"})
+        return {"detail": "Carrera creada exitosamente"}
     except Exception as e:
-        print("Error al crear carrera:", e)
-        return JSONResponse(status_code=500, content={"detail": "Error al crear carrera"})
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Error al crear carrera")
 
 @carrera_router.put("/carreras/edit/{id}")
-def editar_carrera(id: int, carrera: EditarCarrera):
+def editar_carrera(id: int, carrera: EditarCarrera, payload=Depends(obtener_usuario_actual)):
+    if payload["type"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin puede editar carreras")
+    carrera_existente = session.query(Carrera).filter(Carrera.id == id).first()
+    if not carrera_existente:
+        raise HTTPException(status_code=404, detail="Carrera no encontrada")
+    if carrera.nombre:
+        carrera_existente.nombre = carrera.nombre
     try:
-        # Buscar la carrera por ID
-        carrera_existente = session.query(Carrera).filter(Carrera.id == id).first()
-        
-        if not carrera_existente:
-            return JSONResponse(status_code=404, content={"detail": "Carrera no encontrada"})
-        
-        # Actualizar los campos de la carrera
-        if carrera.nombre:
-            carrera_existente.nombre = carrera.nombre
-        
         session.commit()
-        return JSONResponse(status_code=200, content={"detail": "Carrera actualizada exitosamente"})
-    except IntegrityError as e:
-        session.rollback()
-        print("Error al editar carrera:", e)
-        return JSONResponse(status_code=400, content={"detail": "Error al editar carrera"})
+        return {"detail": "Carrera actualizada exitosamente"}
     except Exception as e:
-        print("Error al editar carrera:", e)
-        return JSONResponse(status_code=500, content={"detail": "Error al editar carrera"})
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Error al editar carrera")
     
 @carrera_router.delete("/carreras/delete/{id}")
-def eliminar_carrera(id: int):
+def eliminar_carrera(id: int, payload=Depends(obtener_usuario_actual)):
+    if payload["type"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin puede eliminar carreras")
+    carrera = session.query(Carrera).filter(Carrera.id == id).first()
+    if not carrera:
+        raise HTTPException(status_code=404, detail="Carrera no encontrada")
     try:
-        # Buscar la carrera por ID
-        carrera = session.query(Carrera).filter(Carrera.id == id).first()
-        
-        if not carrera:
-            return JSONResponse(status_code=404, content={"detail": "Carrera no encontrada"})
-        
         session.delete(carrera)
         session.commit()
-        return JSONResponse(status_code=200, content={"detail": "Carrera eliminada exitosamente"})
+        return {"detail": "Carrera eliminada exitosamente"}
     except Exception as e:
-        print("Error al eliminar carrera:", e)
-        return JSONResponse(status_code=500, content={"detail": "Error al eliminar carrera"})
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Error al eliminar carrera")
