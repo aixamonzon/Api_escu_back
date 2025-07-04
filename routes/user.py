@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from psycopg2 import IntegrityError
-from models.user import session, InputUser, User, InputLogin, InputUserDetail
+from models.user import UserDetail, session, InputUser, User, InputLogin, InputUserDetail
+from security.auth import create_access_token, get_current_user
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import (
    joinedload,
 )
@@ -41,24 +43,44 @@ def obtener_usuario_detalle():
       )
 
 
+@user.post("/users/login")
+def login_post(userIn: InputLogin):
+   try:
+       user = session.query(User).filter(User.username == userIn.username).first()
+       if not user.password == userIn.password:
+           return JSONResponse(
+               status_code=401,
+               content={
+                   "success": False,
+                   "message": "Usuario y/o password incorrectos!",
+               },
+           )
+       else:
+           authDat = create_access_token(user)
+           if not authDat:
+               return JSONResponse(
+                   status_code=401,
+                   content={
+                       "success": False,
+                       "message": "Error de generación de token!",
+                   },
+               )
+           else:
+               return JSONResponse(
+                   status_code=200, content={"success": True, "token": authDat}
+               )
 
 
-@user.get("/users/login/{n}")
-def get_users_id(user: InputLogin):
-    try:
-        # Buscar el usuario por nombre de usuario
-        res = session.query(User).filter(User.username == user.username).first()
-        
-        # Verificar si el usuario fue encontrado y si la contraseña coincide
-        if res and res.password == user.password:
-            return res
-        
-        # Retornar None si no coincide la contraseña o no se encontró el usuario
-        return None
+   except Exception as e:
+       print(e)
+       return JSONResponse(
+           status_code=500,
+           content={
+               "success": False,
+               "message": "Error interno del servidor",
+           },
+       )
 
-    except Exception as e:
-        # Mostrar el error en consola para depuración
-        print(f"Error al intentar iniciar sesión: {e}")
 
 
 @user.post("/users/add")
@@ -108,7 +130,6 @@ def get_userDetails():
        return session.query(UserDetail).all()
    except Exception as e:
        print(e)
-
 
 @user.post("/userdetail/add")
 def add_usuarDetail(userDet: InputUserDetail):
